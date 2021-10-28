@@ -1,0 +1,12 @@
+Wed Oct 27 11:24:44 2021 Epoch 0, lr: 0.0001000, val loss: 143.53999, acc: 47.95000
+Wed Oct 27 11:52:25 2021 Epoch 0, lr: 0.0001000, val loss: 142.43225, acc: 49.34000
+Wed Oct 27 12:04:21 2021 Epoch 0, lr: 0.0001000, val loss: 891.15451, acc: 49.25000
+Wed Oct 27 12:46:10 2021 Epoch 0, lr: 0.0001000, val loss: 891.57335, acc: 49.23000
+Wed Oct 27 13:17:00 2021 Epoch 0, lr: 0.0001000, val loss: 787.94281, acc: 54.52000
+Wed Oct 27 13:33:06 2021 Epoch 0, lr: 0.0001000, val loss: 719.03700, acc: 58.10000
+Wed Oct 27 13:44:42 2021 Epoch 1, lr: 0.0000962, val loss: 688.38550, acc: 60.90000
+Wed Oct 27 13:56:13 2021 Epoch 2, lr: 0.0001000, val loss: 652.46999, acc: 62.20000
+Wed Oct 27 14:07:41 2021 Epoch 3, lr: 0.0000962, val loss: 630.04416, acc: 63.67000
+Wed Oct 27 14:18:55 2021 Epoch 4, lr: 0.0000854, val loss: 604.57505, acc: 65.68000
+Wed Oct 27 14:29:42 2021 Epoch 5, lr: 0.0000691, val loss: 546.59025, acc: 69.29000
+Wed Oct 27 14:40:33 2021 Epoch 6, lr: 0.0000500, val loss: 539.45191, acc: 69.71000

@@ -1,0 +1,346 @@
+from argparse import ArgumentParser
+import json
+import pathlib
+
+import matplotlib.pyplot as plt
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
+
+import torchvision
+import torchvision.transforms as transforms
+
+from custom import (
+    ReconstructionLoss,
+    RegularizationLoss,
+)
+
+from custom import VisionPonder
+from model import VisionTransformer
+@torch.no_grad()
+def evaluate(dataloader, module):
+    """Compute relevant metrics.
+
+    Parameters
+    ----------
+    dataloader : DataLoader
+        Dataloader that yields batches of `x` and `y`.
+
+    module : PonderNet
+        Our pondering network.
+
+    Returns
+    -------
+    metrics_single : dict
+        Scalar metrics. The keys are names and the values are `torch.Tensor`.
+        These metrics are computed as mean values over the entire dataset.
+
+    metrics_per_step : dict
+        Per step metrics. The keys are names and the values are `torch.Tensor`
+        of shape `(max_steps,)`. These metrics are computed as mean values over
+        the entire dataset.
+
+    """
+    # Imply device and dtype
+    param = next(module.parameters())
+    device, dtype = param.device, param.dtype
+
+    metrics_single_ = {
+        "accuracy_halted": [],
+        "halting_step": [],
+    }
+    metrics_per_step_ = {
+        "accuracy": [],
+        "p": [],
+    }
+
+    for x_batch, y_true_batch in dataloader:
+        x_batch = x_batch.to(device, dtype)  # (batch_size, n_elems)
+        y_true_batch = y_true_batch.to(device, dtype)  # (batch_size,)
+
+        y_pred_batch, p, halting_step = module(x_batch)
+        y_halted_batch = y_pred_batch.gather(
+            dim=0,
+            index=halting_step[None, :] - 1,
+        )[
+            0
+        ]  # (batch_size,)
+
+        # Computing single metrics (mean over samples in the batch)
+        accuracy_halted = (
+            ((y_halted_batch > 0) == y_true_batch).to(torch.float32).mean()
+        )
+
+        metrics_single_["accuracy_halted"].append(accuracy_halted)
+        metrics_single_["halting_step"].append(
+            halting_step.to(torch.float).mean()
+        )
+
+        # Computing per step metrics (mean over samples in the batch)
+        accuracy = (
+            ((y_pred_batch > 0) == y_true_batch[None, :])
+            .to(torch.float32)
+            .mean(dim=1)
+        )
+
+        metrics_per_step_["accuracy"].append(accuracy)
+        metrics_per_step_["p"].append(p.mean(dim=1))
+
+    metrics_single = {
+        name: torch.stack(values).mean(dim=0).cpu().numpy()
+        for name, values in metrics_single_.items()
+    }
+
+    metrics_per_step = {
+        name: torch.stack(values).mean(dim=0).cpu().numpy()
+        for name, values in metrics_per_step_.items()
+    }
+
+    return metrics_single, metrics_per_step
+
+
+def plot_distributions(target, predicted):
+    """Create a barplot.
+
+    Parameters
+    ----------
+    target, predicted : np.ndarray
+        Arrays of shape `(max_steps,)` representing the target and predicted
+        probability distributions.
+
+    Returns
+    -------
+    matplotlib.Figure
+    """
+    support = list(range(1, len(target) + 1))
+
+    fig, ax = plt.subplots(dpi=140)
+
+    ax.bar(
+        support,
+        target,
+        color="red",
+        label=f"Target - Geometric({target[0].item():.2f})",
+    )
+
+    ax.bar(
+        support,
+        predicted,
+        color="green",
+        width=0.4,
+        label="Predicted",
+    )
+
+    ax.set_ylim(0, 0.6)
+    ax.set_xticks(support)
+    ax.legend()
+    ax.grid()
+
+    return fig
+
+
+def plot_accuracy(accuracy):
+    """Create a barplot representing accuracy over different halting steps.
+
+    Parameters
+    ----------
+    accuracy : np.array
+        1D array representing accuracy if we were to take the output after
+        the corresponding step.
+
+    Returns
+    -------
+    matplotlib.Figure
+    """
+    support = list(range(1, len(accuracy) + 1))
+
+    fig, ax = plt.subplots(dpi=140)
+
+    ax.bar(
+        support,
+        accuracy,
+        label="Accuracy over different steps",
+    )
+
+    ax.set_ylim(0, 1)
+    ax.set_xticks(support)
+    ax.legend()
+    ax.grid()
+
+    return fig
+
+
+def main(argv=None):
+    """CLI for training."""
+    parser = ArgumentParser()
+
+    parser.add_argument(
+        "--log",
+        type=str,
+        default="./tensorboard",
+        help="Folder where tensorboard logging is saved",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=32,
+        help="Batch size",
+    )
+    parser.add_argument(
+        "--beta",
+        type=float,
+        default=0.01,
+        help="Regularization loss coefficient",
+    )
+    parser.add_argument(
+        "-d",
+        "--device",
+        type=str,
+        choices={"cpu", "cuda"},
+        default="cuda",
+        help="Device to use",
+    )
+    parser.add_argument(
+        "--eval-frequency",
+        type=int,
+        default=10_000,
+        help="Evaluation is run every `eval_frequency` steps",
+    )
+    parser.add_argument(
+        "--lambda-p",
+        type=float,
+        default=0.4,
+        help="True probability of success for a geometric distribution",
+    )
+    parser.add_argument(
+        "--n-iter",
+        type=int,
+        default=1_000_000,
+        help="Number of gradient steps",
+    )
+    parser.add_argument(
+        "--n-elems",
+        type=int,
+        default=64,
+        help="Number of elements",
+    )
+    parser.add_argument(
+        "--n-hidden",
+        type=int,
+        default=64,
+        help="Number of hidden elements in the reccurent cell",
+    )
+    parser.add_argument(
+        "--n-nonzero",
+        type=int,
+        nargs=2,
+        default=(None, None),
+        help="Lower and upper bound on nonzero elements in the training set",
+    )
+    parser.add_argument(
+        "--max-steps",
+        type=int,
+        default=20,
+        help="Maximum number of pondering steps",
+    )
+    parser.add_argument(
+        "--n-classes",
+        type=int,
+        default=10,
+        help="Number of classes",
+    )
+
+    # Parameters
+    args = parser.parse_args(argv)
+    print(args)
+    
+    device = torch.device(args.device)
+    dtype = torch.float32
+    n_eval_samples = 1000
+    batch_size_eval = 50
+    epochs = 10
+
+    if args.n_nonzero[0] is None and args.n_nonzero[1] is None:
+        threshold = int(0.3 * args.n_elems)
+        range_nonzero_easy = (1, threshold)
+        range_nonzero_hard = (args.n_elems - threshold, args.n_elems)
+    else:
+        range_nonzero_easy = (1, args.n_nonzero[1])
+        range_nonzero_hard = (args.n_nonzero[1] + 1, args.n_elems)
+
+    # Tensorboard
+    log_folder = pathlib.Path(args.log)
+    writer = SummaryWriter(log_folder)
+    writer.add_text("parameters", json.dumps(vars(args)))
+
+    transform = transforms.Compose(
+    [
+        transforms.RandomCrop(32, padding=4),
+        #transforms.Resize(224),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+    ])
+
+    # Prepare data
+    trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
+                                        download=False, transform=transform)
+    dataloader_train = DataLoader(trainset, batch_size=args.batch_size,
+                                          shuffle=True, num_workers=2)
+
+    testset = torchvision.datasets.CIFAR10(root='./data', train=False,
+                                       download=False, transform=transform)
+    eval_dataloaders = torch.utils.data.DataLoader(testset, batch_size=args.batch_size,
+                                         shuffle=False, num_workers=2)
+
+    # Model preparation
+    """
+    module = PonderNet(
+        n_elems=args.n_elems,
+        n_hidden=args.n_hidden,
+        max_steps=args.max_steps,
+    )
+    """
+    custom_config = {
+        "img_size": 32,
+        "in_chans": 3,
+        "patch_size": 4,
+        "embed_dim": 512,
+        "depth": 6,
+        "n_heads": 8,
+        "qkv_bias": True,
+        "mlp_ratio": 4,
+        "n_classes": 10,
+}
+    module = VisionTransformer(**custom_config)
+    module = module.to(device, dtype)
+
+    # Loss preparation
+    loss_func = nn.CrossEntropyLoss()
+    # Optimizer
+    optimizer = torch.optim.Adam(
+        module.parameters(),
+        lr=0.001,
+    )
+
+    # Training and evaluation loops
+    #iterator = tqdm(enumerate(dataloader_train), total=args.n_iter)
+    for epoch in range(1, epochs+1):
+        loss = 0
+        for step, (x_batch, y_true_batch) in tqdm(enumerate(dataloader_train), total = len(dataloader_train)):
+            x_batch = x_batch.to(device)
+            y_true_batch = y_true_batch.to(device)
+
+            y_pred_batch  = module(x_batch)
+            loss_rec = loss_func(y_pred_batch,y_true_batch)
+            
+            loss_rec.backward()
+
+            #torch.nn.utils.clip_grad_norm_(module.parameters(), 1)
+            optimizer.step()
+            loss += loss_rec.item()
+        writer.add_scalar("loss", loss, epoch)
+        print(loss)
+if __name__ == "__main__":
+    main()

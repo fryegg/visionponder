@@ -1,5 +1,5 @@
 # VisionPonder
-VIT version of [ponderNet](https://arxiv.org/abs/2107.05407). Improve adaptive computation performance. This is the repository to use ponderNet in [VIT](https://arxiv.org/abs/2010.11929)(code from the pytorch ver [repo](https://github.com/lucidrains/vit-pytorch)).
+VIT version of [ponderNet](https://arxiv.org/abs/2107.05407). Improve adaptive computation performance. This is the repository to use ponderNet in [VIT](https://arxiv.org/abs/2010.11929) (code from the pytorch ver. [repo](https://github.com/lucidrains/vit-pytorch)).
 
 ## Installation
 

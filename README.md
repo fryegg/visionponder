@@ -25,8 +25,8 @@ python train_cifar10.py --net ponder --data cifar10 --bs 64 --max-steps 20
 | Dataset   | Max Step | patch size| Test loss | Test acc| Avg Halting Step|
 | ------ | ------ |------ | ------ |------ |------ |
 | CIFAR10  |    20    | 2  | 543.94| **68.98%**| **13.06**|
-| CIFAR10  |    20    | 4  | 87.90| **60.31%**| **15.852**|
-| CIFAR100 |    20    | 4   | 220.24| **30.02%**| **18.268**|
+| CIFAR10  |    20    | 4  | 87.90| **60.31%**| **15.85**|
+| CIFAR100 |    20    | 4   | 220.24| **30.02%**| **18.27**|
 
 
 ## Contributing

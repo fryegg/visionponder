@@ -1,5 +1,5 @@
 # VisionPonder
-VIT version of [ponderNet](https://arxiv.org/abs/2107.05407). Improve adaptive computation performance. This is the repository to use ponderNet in [VIT](https://arxiv.org/abs/2010.11929) (code from the pytorch ver. [repo](https://github.com/lucidrains/vit-pytorch)).
+VIT version of [ponderNet](https://arxiv.org/abs/2107.05407). Improve adaptive computation performance. This is the repository to use ponderNet (code from lambl homepage [repo](https://nn.labml.ai/adaptive_computation/ponder_net/index.html) in [VIT](https://arxiv.org/abs/2010.11929) (code from the pytorch ver. [repo](https://github.com/lucidrains/vit-pytorch)).
 
 ## Short Summary
 We propose the vision ponder to have effective computation. Vision Ponder used VIT (Vision Transformer) \cite{dosovitskiy2021image}. model as a baseline and use PonderNet. We will also show computational steps on well-known datasets such as CIFAR10, CIFAR100, ImageNet to know how complex the setting between training and test set is to get high accuracy.

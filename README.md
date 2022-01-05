@@ -1,3 +1,4 @@
+![image info](./diagram1.jpg)
 # VisionPonder
 VIT version of [ponderNet](https://arxiv.org/abs/2107.05407). Improve adaptive computation performance. This is the repository to use ponderNet (code from lambl homepage [repo](https://nn.labml.ai/adaptive_computation/ponder_net/index.html)) in [VIT](https://arxiv.org/abs/2010.11929) (code from the pytorch ver. [repo](https://github.com/lucidrains/vit-pytorch)).
 
